@@ -1,0 +1,4 @@
+/logs/*
+/lifebot-env
+/.idea
+/__pycache__
