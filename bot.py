@@ -66,7 +66,7 @@ class Client(discord.Client):
 
 	HELP_TEMPLATE = '''
 	'Life-Game' bot help:
-	#play <width> <height> [has_borders=False] — starts new game in new message. Type #help-play for more details
+	#start <width> <height> [has_borders=False] — starts new game in new message. Type #help-start for more details
 	#help / #info — shows 'help' message
 	#exit — shutdowns bot.
 	'''
@@ -179,21 +179,25 @@ class Client(discord.Client):
 		c = msg.content
 		logger.debug(c[0] == '#')
 		logger.debug(c[0])
-		if c[0] == '#':
-			com = c[1:].split()
-			logger.debug('Close')
-			logger.debug(com[0])
-			if com[0] == 'start':
-				logger.debug('Kek')
-				await self.init_game(com, msg)
-			elif com[0] == 'exit':
-				logger.info('Logging out...')
-				await Client.send(msg, 'Bot shutdowns...')
-				await self.close()
-			elif com[0] == 'help' or com[0] == 'info':
-				await Client.send(msg, Client.HELP_TEMPLATE)
-			elif com[0] == 'help-play':
-				await Client.send(msg, Client.HELP_PLAY_TEMPLATE)
+		try:
+			if c[0] == '#':
+				com = c[1:].split()
+				logger.debug('Close')
+				logger.debug(com[0])
+				if com[0] == 'start':
+					logger.debug('Kek')
+					await self.init_game(com, msg)
+				elif com[0] == 'exit':
+					logger.info('Logging out...')
+					await Client.send(msg, 'Bot shutdowns...')
+					await self.close()
+				elif com[0] == 'help' or com[0] == 'info':
+					await Client.send(msg, Client.HELP_TEMPLATE)
+				elif com[0] == 'help-play':
+					await Client.send(msg, Client.HELP_PLAY_TEMPLATE)
+		except Exception as e:
+			error(e)
+			await Client.send(msg, 'Invalid arguments received. Type #help-start for more details.')
 
 
 if __name__ == '__main__':
