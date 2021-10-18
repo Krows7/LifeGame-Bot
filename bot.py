@@ -5,6 +5,7 @@ import logging
 import sys
 import time
 from datetime import datetime
+from unittest.mock import Mock
 
 get_config = lambda x, d: getattr(config, x) if hasattr(config, x) else d
 error = lambda e: logger.exception('Exception Caught: ', exc_info=(e))
@@ -58,6 +59,7 @@ class LifeGame:
 				field[x][y] = 1 if neigh == 3 or (neigh == 2 and self.field[x][y]) else 0
 		self.field = field
 
+
 class Client(discord.Client):
 
 	BLACK_SQUARE = ':black_large_square:'
@@ -107,16 +109,13 @@ class Client(discord.Client):
 		await self.game_msg.edit(content=Client.get_field_msg(self.game))
 		time.sleep(1)
 
-	async def add_reaction(self, r, msg):
-		await msg.add_reaction(r)
-
 	async def init_game(self, com, msg):
 		logger.debug('Init game...')
 		x, y = map(int, com[1:3])
 		self.game = LifeGame(x, y)
-		self.game_msg = await self.send(msg, Client.get_field_msg(self.game))
+		self.game_msg = await Client.send(msg, Client.get_field_msg(self.game))
 		for e in Client.REACTIONS.items():
-			await self.add_reaction(e[1], self.game_msg)
+			await self.game_msg.add_reaction(e[1])
 
 	@staticmethod
 	def get_field_msg(game):
@@ -138,7 +137,6 @@ class Client(discord.Client):
 
 	@staticmethod
 	async def send(msg, content):
-		logger.debug(msg.channel.type)
 		ch = msg.channel
 		if isinstance(ch, discord.DMChannel):
 			logger.debug(f'Received from User {msg.author} directly')
@@ -153,51 +151,54 @@ class Client(discord.Client):
 
 	async def on_reaction(self, client, r, something):
 		if self.user.id != r.user_id and r.message_id == self.game_msg.id:
-			if r.emoji.name == Client.REACTIONS['START']:
-				await self.start_game()
-			elif r.emoji.name == Client.REACTIONS['ARROW_LEFT']:
-				self.game.cy = LifeGame.clamp(self.game.cy - 1, self.game.y)
-			elif r.emoji.name == Client.REACTIONS['ARROW_RIGHT']:
-				self.game.cy = LifeGame.clamp(self.game.cy + 1, self.game.y)
-			elif r.emoji.name == Client.REACTIONS['ARROW_UP']:
-				self.game.cx = LifeGame.clamp(self.game.cx - 1, self.game.x)
-			elif r.emoji.name == Client.REACTIONS['ARROW_DOWN']:
-				self.game.cx = LifeGame.clamp(self.game.cx + 1, self.game.x)
-			elif r.emoji.name == Client.REACTIONS['REFRESH']:
-				self.game.field = LifeGame.create_field(self.game.x, self.game.y)
-			elif r.emoji.name == Client.REACTIONS['PICK']:
-				i = self.game.field[self.game.cx][self.game.cy]
-				self.game.field[self.game.cx][self.game.cy] = 0 if i else 1
-			elif r.emoji.name == Client.REACTIONS['RANDOMIZE']:
-				for y in range(self.game.y):
-					for x in range(self.game.x):
-						self.game.field[x][y] = random.randint(0, 1)
-			await self.update_field()
+			self.process_reaction(r)
+
+	async def process_reaction(self, r):
+		if r.emoji.name == Client.REACTIONS['START']:
+			await self.start_game()
+		elif r.emoji.name == Client.REACTIONS['ARROW_LEFT']:
+			self.game.cy = LifeGame.clamp(self.game.cy - 1, self.game.y)
+		elif r.emoji.name == Client.REACTIONS['ARROW_RIGHT']:
+			self.game.cy = LifeGame.clamp(self.game.cy + 1, self.game.y)
+		elif r.emoji.name == Client.REACTIONS['ARROW_UP']:
+			self.game.cx = LifeGame.clamp(self.game.cx - 1, self.game.x)
+		elif r.emoji.name == Client.REACTIONS['ARROW_DOWN']:
+			self.game.cx = LifeGame.clamp(self.game.cx + 1, self.game.x)
+		elif r.emoji.name == Client.REACTIONS['REFRESH']:
+			self.game.field = LifeGame.create_field(self.game.x, self.game.y)
+		elif r.emoji.name == Client.REACTIONS['PICK']:
+			i = self.game.field[self.game.cx][self.game.cy]
+			self.game.field[self.game.cx][self.game.cy] = 0 if i else 1
+		elif r.emoji.name == Client.REACTIONS['RANDOMIZE']:
+			for y in range(self.game.y):
+				for x in range(self.game.x):
+					self.game.field[x][y] = random.randint(0, 1)
+		await self.update_field()
 
 	async def on_message(self, msg):
-		logger.debug(f'Message received: [Content: {msg.content}]; [Arguemnts = {msg.content.split()}] {msg}')
-		c = msg.content
-		logger.debug(c[0] == '#')
-		logger.debug(c[0])
+		logger.debug(f'Message received: [Content: {msg.content}]; [Arguments = {msg.content.split()}] {msg}')
 		try:
-			if c[0] == '#':
-				com = c[1:].split()
-				logger.debug('Close')
-				logger.debug(com[0])
-				if com[0] == 'start':
-					logger.debug('Kek')
-					await self.init_game(com, msg)
-				elif com[0] == 'exit':
-					logger.info('Logging out...')
-					await Client.send(msg, 'Bot shutdowns...')
-					await self.close()
-				elif com[0] == 'help' or com[0] == 'info':
-					await Client.send(msg, Client.HELP_TEMPLATE)
-				elif com[0] == 'help-play':
-					await Client.send(msg, Client.HELP_PLAY_TEMPLATE)
+			await self.process_message(msg)
 		except Exception as e:
 			error(e)
 			await Client.send(msg, 'Invalid arguments received. Type #help-start for more details.')
+
+	async def process_message(self, msg):
+		c = msg.content
+		if c[0] == '#':
+			com = c[1:].split()
+			if com[0] == 'start':
+				await self.init_game(com, msg)
+			elif com[0] == 'exit':
+				logger.info('Logging out...')
+				await Client.send(msg, 'Bot shutdowns...')
+				await self.close()
+			elif com[0] == 'help' or com[0] == 'info':
+				await Client.send(msg, Client.HELP_TEMPLATE)
+			elif com[0] == 'help-play':
+				await Client.send(msg, Client.HELP_PLAY_TEMPLATE)
+			else:
+				raise Exception()
 
 
 if __name__ == '__main__':
